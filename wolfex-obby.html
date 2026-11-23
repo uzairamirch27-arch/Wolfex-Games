@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#11151d">
+<title>Wolfex Obby | Wolfex Games</title>
+<style>
+:root{--bg:#10141b;--panel:#1b222d;--red:#e43d43;--blue:#2878d0;--white:#f5f7fb;--muted:#aab4c2}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#26354a 0,#10141b 55%);color:var(--white);font-family:Inter,Segoe UI,Arial,sans-serif;min-height:100vh}
+header{height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(16px,4vw,54px);border-bottom:1px solid #ffffff18;background:#0d1118dd}
+.brand{font-weight:900;letter-spacing:1.5px;font-size:20px}.brand span{color:var(--red)}.tag{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:3px}
+header a{color:#dce6f3;text-decoration:none;font-size:13px;border:1px solid #ffffff25;padding:10px 14px;border-radius:9px}
+main{max-width:1120px;margin:26px auto;padding:0 16px}
+.intro{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+h1{font-size:clamp(28px,4vw,42px);margin:0 0 6px;letter-spacing:-1px}.intro p{margin:0;color:var(--muted);font-size:14px}
+.stats{display:flex;gap:9px;flex-wrap:wrap}.stat{background:#1b222d;border:1px solid #ffffff16;padding:10px 14px;border-radius:10px;min-width:100px}.stat small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px}.stat strong{font-size:18px}
+.game-shell{background:#151b24;border:1px solid #ffffff22;border-radius:17px;padding:12px;box-shadow:0 22px 70px #0008}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#9bc5e9;border-radius:10px;image-rendering:crisp-edges;touch-action:none}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 3px 2px}.controls-hint{color:var(--muted);font-size:12px}
+button{font:inherit;cursor:pointer;border:0;border-radius:9px;padding:10px 15px;font-weight:800;color:white;background:var(--blue)}button:hover{filter:brightness(1.12)}button.secondary{background:#303a49;border:1px solid #ffffff20}button.red{background:var(--red)}
+.help{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.help article{background:#171e28;border:1px solid #ffffff14;border-radius:12px;padding:14px}.help b{display:block;margin-bottom:5px}.help p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.mobile-controls{display:none;justify-content:center;gap:12px;margin-top:12px}.mobile-controls button{width:70px;height:54px;font-size:20px;background:#263548;border:1px solid #ffffff30;touch-action:none}
+footer{text-align:center;color:#778395;font-size:11px;padding:24px}
+@media(max-width:650px){.help{grid-template-columns:1fr}.mobile-controls{display:flex}.controls-hint{font-size:11px}}
+</style>
+</head>
+<body>
+<header><div><div class="brand">WOLFEX <span>GAMES</span></div><div class="tag">PLAY BEYOND LIMITS</div></div><a href="index.html">← Studio Home</a></header>
+<main>
+  <section class="intro"><div><h1>WOLFEX OBBY</h1><p>Run. Jump. Survive. Reach the finish across 50 stages.</p></div>
+  <div class="stats"><div class="stat"><small>Stage</small><strong id="stageText">1 / 50</strong></div><div class="stat"><small>Coins</small><strong id="coinText">0</strong></div><div class="stat"><small>Best</small><strong id="bestText">1</strong></div></div></section>
+  <section class="game-shell">
+    <canvas id="game" width="960" height="540" aria-label="Wolfex Obby game area"></canvas>
+    <div class="toolbar"><span class="controls-hint">MOVE: A / D or ← / → &nbsp; • &nbsp; JUMP: SPACE / W / ↑ &nbsp; • &nbsp; PAUSE: P</span><div><button class="secondary" id="restartBtn">Restart stage</button> <button class="red" id="pauseBtn">Pause</button></div></div>
+  </section>
+  <div class="mobile-controls"><button id="leftBtn" aria-label="Move left">◀</button><button id="jumpBtn" aria-label="Jump">▲</button><button id="rightBtn" aria-label="Move right">▶</button></div>
+  <section class="help"><article><b>🎮 Controls</b><p>Use A/D or arrow keys to move. Press Space, W or Up to jump. You can also use the touch buttons on mobile.</p></article><article><b>🚩 Checkpoints</b><p>Reach the blue checkpoint flag halfway through a stage. If you fall, you'll restart there.</p></article><article><b>🪙 Collect coins</b><p>Grab coins along the course. Your coins and unlocked stage are saved in this browser.</p></article></section>
+</main>
+<footer>© Wolfex Games · Wolfex Obby · A browser game prototype</footer>
+<script>
+(() => {
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=960,H=540,GROUND=475,MAX=50;
+const $=id=>document.getElementById(id);
+let stage=1,coins=0,best=1,paused=false,started=false,won=false,checkpointX=60,checkpointActive=false;
+try{stage=Math.max(1,Math.min(MAX,Number(localStorage.getItem('wolfexObbyStage'))||1));best=stage;coins=Number(localStorage.getItem('wolfexObbyCoins'))||0;}catch(e){}
+const player={x:60,y:GROUND-42,w:30,h:42,vx:0,vy:0,onGround:false,face:1};
+let platforms=[],spikes=[],gems=[],movers=[],flagX=485,finishX=900,keys={},touch={left:false,right:false,jump:false},frame=0;
+function rand(n){let x=Math.sin(n*127.1+stage*311.7)*43758.5453;return x-Math.floor(x)}
+function makeLevel(){
+ platforms=[{x:0,y:GROUND,w:220,h:65},{x:300,y:GROUND,w:220,h:65},{x:600,y:GROUND,w:360,h:65}];
+ spikes=[];gems=[];movers=[];checkpointX=485;checkpointActive=false;flagX=485;finishX=900;
+ // Stage difficulty rises gradually, while preserving a reachable route.
+ const difficulty=Math.min(1,(stage-1)/49);
+ const gap=80+Math.floor(difficulty*24);
+ platforms[0].w=220-Math.floor(difficulty*15);
+ platforms[1].x=platforms[0].x+platforms[0].w+gap;
+ platforms[1].w=200-Math.floor(difficulty*10);
+ platforms[2].x=platforms[1].x+platforms[1].w+gap;
+ platforms[2].w=960-platforms[2].x;
+ // Stepping stones bridge each gap.
+ platforms.push({x:platforms[0].x+platforms[0].w+26,y:GROUND-78,w:78,h:16});
+ platforms.push({x:platforms[1].x+platforms[1].w+22,y:GROUND-92,w:82,h:16});
+ // Additional raised ledges.
+ if(stage>=3) platforms.push({x:650,y:GROUND-125-Math.floor(difficulty*20),w:92,h:16});
+ if(stage>=7) platforms.push({x:355,y:GROUND-145,w:82,h:16});
+ const spikeCount=Math.min(7,1+Math.floor(stage/8));
+ for(let i=0;i<spikeCount;i++){
+   let x=245+i*92+rand(i+stage)*18;
+   if(x>850)x=820;
+   spikes.push({x,y:GROUND-25,w:27,h:25});
+ }
+ const gemCount=4;
+ for(let i=0;i<gemCount;i++){
+   let x=155+i*190+rand(i+stage*2)*25;
+   let y=GROUND-75-(i%2)*55;
+   gems.push({x,y,r:10,taken:false});
+ }
+ if(stage>=5)movers.push({x:690,y:GROUND-155,w:64,h:14,base:690,range:80,speed:.018+stage*.00012,phase:stage});
+ player.x=60;player.y=GROUND-player.h;player.vx=0;player.vy=0;player.onGround=false;player.face=1;
+ updateHUD();draw();
+}
+function updateHUD(){$('stageText').textContent=stage+' / '+MAX;$('coinText').textContent=coins;$('bestText').textContent=best;}
+function save(){try{localStorage.setItem('wolfexObbyStage',String(Math.max(stage,best)));localStorage.setItem('wolfexObbyCoins',String(coins));}catch(e){}}
+function rects(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function resetAtCheckpoint(){player.x=checkpointActive?checkpointX+15:60;player.y=GROUND-player.h;player.vx=0;player.vy=0;}
+function nextStage(){
+ if(stage>=MAX){won=true;paused=true;save();draw();return;}
+ stage++;best=Math.max(best,stage);save();makeLevel();checkpointActive=false;
+}
+function update(){
+ if(paused||!started||won)return;
+ frame++;
+ const left=keys.ArrowLeft||keys.a||keys.A||touch.left,right=keys.ArrowRight||keys.d||keys.D||touch.right,jump=keys[' ']||keys.ArrowUp||keys.w||keys.W||touch.jump;
+ const accel=.72, max=5.2;
+ if(left){player.vx=Math.max(-max,player.vx-accel);player.face=-1}
+ if(right){player.vx=Math.min(max,player.vx+accel);player.face=1}
+ if(!left&&!right)player.vx*=.78;
+ if(jump&&player.onGround){player.vy=-13.3;player.onGround=false}
+ player.vy+=.62;if(player.vy>14)player.vy=14;
+ player.x+=player.vx;
+ player.x=Math.max(0,Math.min(W-player.w,player.x));
+ const oldY=player.y;player.y+=player.vy;player.onGround=false;
+ for(const p of platforms){
+  if(player.x+player.w>p.x&&player.x<p.x+p.w&&oldY+player.h<=p.y+4&&player.y+player.h>=p.y&&player.vy>=0){
+   player.y=p.y-player.h;player.vy=0;player.onGround=true;
+  }
+ }
+ for(const m of movers){m.x=m.base+Math.sin(frame*m.speed+m.phase)*m.range;if(rects(player,m)){if(player.vy>0&&oldY+player.h<=m.y+8){player.y=m.y-player.h;player.vy=0;player.onGround=true}else resetAtCheckpoint();}}
+ for(const s of spikes){if(rects(player,{x:s.x+5,y:s.y+8,w:s.w-10,h:s.h-8}))resetAtCheckpoint();}
+ for(const g of gems){if(!g.taken&&Math.hypot(player.x+player.w/2-g.x,player.y+player.h/2-g.y)<27){g.taken=true;coins++;updateHUD();save();}}
+ if(!checkpointActive&&player.x+player.w>flagX){checkpointActive=true;checkpointX=flagX; }
+ if(player.y>H+30)resetAtCheckpoint();
+ if(player.x+player.w>=finishX){nextStage();}
+}
+function draw(){
+ const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#9dc9ee');sky.addColorStop(1,'#e8f3fb');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+ // distant hills
+ ctx.fillStyle='#789bb8';ctx.beginPath();ctx.moveTo(0,380);for(let x=0;x<=W;x+=80)ctx.lineTo(x,330+Math.sin(x*.012+stage)*28);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill();
+ ctx.fillStyle='#557a9a';ctx.fillRect(0,GROUND+35,W,H-GROUND);
+ // platforms
+ for(const p of platforms){ctx.fillStyle='#263443';ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='#e43d43';ctx.fillRect(p.x,p.y,p.w,7);ctx.fillStyle='#42566d';ctx.fillRect(p.x,p.y+8,p.w,5);}
+ // spikes
+ for(const s of spikes){ctx.fillStyle='#d93640';ctx.beginPath();ctx.moveTo(s.x,s.y+s.h);ctx.lineTo(s.x+s.w/2,s.y);ctx.lineTo(s.x+s.w,s.y+s.h);ctx.closePath();ctx.fill();ctx.strokeStyle='#8e1e29';ctx.stroke();}
+ // movers
+ for(const m of movers){ctx.fillStyle='#2878d0';ctx.fillRect(m.x,m.y,m.w,m.h);ctx.fillStyle='#cde8ff';ctx.fillRect(m.x+5,m.y+3,m.w-10,3);}
+ // coins
+ for(const g of gems){if(g.taken)continue;ctx.fillStyle='#f5b942';ctx.beginPath();ctx.arc(g.x,g.y,10,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff1b8';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#9c6413';ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.fillText('$',g.x,g.y+4);}
+ // checkpoint flag
+ ctx.fillStyle='#34485e';ctx.fillRect(flagX,GROUND-95,5,95);ctx.fillStyle=checkpointActive?'#e43d43':'#2878d0';ctx.beginPath();ctx.moveTo(flagX+5,GROUND-95);ctx.lineTo(flagX+50,GROUND-80);ctx.lineTo(flagX+5,GROUND-65);ctx.fill();
+ // finish gate
+ ctx.fillStyle='#263443';ctx.fillRect(finishX,GROUND-95,8,95);ctx.fillStyle='#e43d43';ctx.fillRect(finishX+8,GROUND-95,40,38);ctx.fillStyle='#fff';ctx.font='bold 14px Arial';ctx.textAlign='left';ctx.fillText('GO!',finishX+12,GROUND-70);
+ // player wolf-ish avatar
+ ctx.fillStyle='#17212e';ctx.fillRect(player.x,player.y+9,player.w,player.h-9);
+ ctx.fillStyle='#e43d43';ctx.beginPath();ctx.moveTo(player.x+3,player.y+13);ctx.lineTo(player.x+5,player.y);ctx.lineTo(player.x+13,player.y+10);ctx.fill();ctx.beginPath();ctx.moveTo(player.x+18,player.y+10);ctx.lineTo(player.x+26,player.y);ctx.lineTo(player.x+28,player.y+13);ctx.fill();
+ ctx.fillStyle='#fff';ctx.fillRect(player.x+(player.face===1?17:7),player.y+20,5,5);
+ ctx.fillStyle='#2878d0';ctx.fillRect(player.x+5,player.y+player.h-7,8,7);ctx.fillRect(player.x+19,player.y+player.h-7,8,7);
+ // HUD overlay
+ ctx.fillStyle='#101820cc';ctx.fillRect(18,18,210,44);ctx.fillStyle='#fff';ctx.font='bold 18px Arial';ctx.textAlign='left';ctx.fillText('STAGE '+stage+' / '+MAX,32,46);
+ if(!started||paused||won){ctx.fillStyle='#0c121bd9';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='900 46px Arial';ctx.fillText(won?'YOU BEAT WOLFEX OBBY!':(!started?'WOLFEX OBBY':'PAUSED'),W/2,H/2-35);ctx.font='18px Arial';ctx.fillStyle='#dce8f5';ctx.fillText(won?'All 50 stages complete. Legendary run!':(!started?'Press PLAY to begin your adventure':'Press P or Resume to continue'),W/2,H/2+5);ctx.fillStyle='#e43d43';ctx.fillRect(W/2-82,H/2+35,164,48);ctx.fillStyle='#fff';ctx.font='bold 18px Arial';ctx.fillText(won?'PLAY AGAIN':(!started?'PLAY':'RESUME'),W/2,H/2+66);}
+}
+function loop(){update();draw();requestAnimationFrame(loop)}
+function start(){if(won){stage=1;best=Math.max(best,1);won=false;coins=0;save();makeLevel();}started=true;paused=false;}
+canvas.addEventListener('click',e=>{if(!started||paused||won){const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;if(x>W/2-100&&x<W/2+100&&y>H/2+20&&y<H/2+100)start();}});
+$('pauseBtn').onclick=()=>{if(started&&!won)paused=!paused;$('pauseBtn').textContent=paused?'Resume':'Pause';};
+$('restartBtn').onclick=()=>{resetAtCheckpoint();if(!started)start();};
+window.addEventListener('keydown',e=>{keys[e.key]=true;if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();if(e.key.toLowerCase()==='p'&&started&&!won){paused=!paused;$('pauseBtn').textContent=paused?'Resume':'Pause';}});
+window.addEventListener('keyup',e=>keys[e.key]=false);
+function bindHold(id,key){const el=$(id);el.addEventListener('pointerdown',e=>{e.preventDefault();touch[key]=true;el.setPointerCapture(e.pointerId)});['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,()=>touch[key]=false));}
+bindHold('leftBtn','left');bindHold('rightBtn','right');bindHold('jumpBtn','jump');
+makeLevel();loop();
+})();
+</script>
+</body></html>
